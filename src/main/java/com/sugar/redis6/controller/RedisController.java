@@ -22,49 +22,55 @@ public class RedisController {
 
         String userId = new Random().nextInt(50000) + "";
         String productId = "plane";
+        //set good:plane 10
+        // 用户 key 商品 key
+        String userKey = "user:" + userId;
+        String prodKey = "good:" + productId;
 
-        // 用户 key
-        String userKey = "good:" + userId;
+        SessionCallback sessionCallback = new SessionCallback<List>() {
+            @Override
+            public List execute(RedisOperations operations) throws DataAccessException {
+                // 监视库存
+                redisTemplate.watch(prodKey);
 
-        // 获取库存
-        int remain = (int) redisTemplate.opsForValue().get(productId);
-        if (remain == 0) {
-            System.out.println("秒杀未开始");
-            return "秒杀未开始";
+                // 获取库存, 若库存为0, 表示秒杀未开始
+                int remain = (int)redisTemplate.opsForValue().get(prodKey);
+                if (remain == 0) {
+                    System.out.println("秒杀未开始");
+                    return null;
+                }
+
+                // 判断库存
+                if ((int)redisTemplate.opsForValue().get(prodKey) < 1) {
+                    System.out.println("库存不足啦");
+                    return null;
+                }
+
+                // 判断用户重复秒杀
+                Boolean member = redisTemplate.opsForSet().isMember(userKey, prodKey);
+                if (member) {
+                    System.out.println("重复秒杀");
+                    return null;
+                }
+
+                // 开始事务, 抢购开始
+                redisTemplate.multi();
+                redisTemplate.opsForValue().decrement(prodKey);
+                redisTemplate.opsForSet().add(userKey,prodKey);
+
+                return redisTemplate.exec();
+            }
+        };
+
+        List<Object> result = (List<Object>) redisTemplate.execute(sessionCallback);
+
+        if (result != null && result.size() != 0) {
+            System.out.println("秒杀成功" + userKey);
+            System.out.println("剩余库存：" + redisTemplate.opsForValue().get(prodKey));
+        }else {
+            System.out.println("秒杀失败");
         }
 
-        // 判断用户是否重复秒杀
-        Boolean member = redisTemplate.opsForSet().isMember(userKey, productId);
-        if (member) {
-            System.out.println("已秒杀成功,不可重复秒杀");
-            return "已秒杀成功,不可重复秒杀";
-        }
-
-        // 库存小于1，秒杀结束
-        if (remain <= 0) {
-            System.out.println("库存不足");
-            return "库存不足";
-        }
-
-        // 库存-1,用户加入名单
-        // 增加事务
-           redisTemplate.execute(new SessionCallback() {
-               @Override
-               public Object execute(RedisOperations operations) throws DataAccessException {
-                   List<Object> exec = null;
-                   operations.watch(productId);
-                   operations.multi();
-                   operations.opsForValue().decrement(productId);
-                   operations.opsForSet().add(userKey, productId);
-                   exec = operations.exec();
-                   if (exec.size() == 0) {
-                       return null;
-                   }
-                   int number = (int) redisTemplate.opsForValue().get(productId);
-                   System.out.println(userId + " 抢购成功！ 当前剩余：" + number);
-                   return null;
-               }
-           });
-        return "秒杀成功：" + userKey;
+        return null;
     }
 }
