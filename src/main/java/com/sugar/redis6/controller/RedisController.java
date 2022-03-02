@@ -12,9 +12,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 @RestController
@@ -96,19 +94,31 @@ public class RedisController {
         return null;
     }
 
+    /** 分布式锁
+     * modify
+     * @author sugar
+     * @date 2022/3/2 19:38
+     */
     @RequestMapping("/lock")
     public void lock() {
+
+        // 生成UUID
+        String uuid = UUID.randomUUID().toString();
+
         // 获取锁
-        Boolean lock = redisTemplate.opsForValue().setIfAbsent("lock", "我是一把锁",3, TimeUnit.SECONDS);
+        Boolean lock = redisTemplate.opsForValue().setIfAbsent("lock", uuid,3, TimeUnit.SECONDS);
 
         // 获得成功
         if (lock) {
             Object age = redisTemplate.opsForValue().get("age");
             // 业务逻辑
             redisTemplate.opsForValue().increment("age");
-            System.out.println(age.toString() + "成功");
-            //释放锁
-            redisTemplate.delete("lock");
+            //释放锁,进行判断释放的是不是自己的锁
+            String script = "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('del',KEYS[1]) else return 0 end";
+            DefaultRedisScript redisScript = new DefaultRedisScript();
+            redisScript.setScriptText(script);
+            redisScript.setResultType(Long.class);
+            redisTemplate.execute(redisScript, Arrays.asList("lock"), uuid);
         }else {
             try {
                 Thread.sleep(100);
