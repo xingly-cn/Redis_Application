@@ -8,12 +8,14 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 public class RedisController {
@@ -92,5 +94,28 @@ public class RedisController {
                 System.out.println("抢购失败");
         }
         return null;
+    }
+
+    @RequestMapping("/lock")
+    public void lock() {
+        // 获取锁
+        Boolean lock = redisTemplate.opsForValue().setIfAbsent("lock", "我是一把锁",3, TimeUnit.SECONDS);
+
+        // 获得成功
+        if (lock) {
+            Object age = redisTemplate.opsForValue().get("age");
+            // 业务逻辑
+            redisTemplate.opsForValue().increment("age");
+            System.out.println(age.toString() + "成功");
+            //释放锁
+            redisTemplate.delete("lock");
+        }else {
+            try {
+                Thread.sleep(100);
+                lock();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
     }
 }
