@@ -21,6 +21,11 @@ public class RedisController {
     @Autowired
     private RedisTemplate redisTemplate;
 
+    /** 乐观锁 + lua 解决超售、库存遗留问题
+     * modify 
+     * @author sugar
+     * @date 2022/3/2 18:22
+     */
     @RequestMapping("/go")
     public String Ms() {
 
